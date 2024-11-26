@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="estilos.css">
+    <title>Webcam con Laberinto</title>
+</head>
+<body>
+    <!-- Barra lila con texto de bienvenida -->
+    <div id="header">
+        <h1>Examen Desarrollo... </h1>
+    </div>
+
+    <!-- Elemento de video donde se mostrará la transmisión en vivo -->
+    <video id="webcam" autoplay playsinline></video>
+
+    <!-- Controles -->
+    <div id="controls">
+        <button id="capture-btn">Capturar Imagen</button>
+        <input type="range" id="progress" min="0" max="100" value="0" disabled>
+    </div>
+
+    <!-- Contenedor para mostrar la imagen capturada -->
+    <div id="captura-container">
+        <canvas id="canvas" style="display:none;"></canvas> <!-- Este canvas no se mostrará en pantalla -->
+        <img id="captura-imagen" src="" alt="Imagen capturada" />
+    </div>
+
+    <!-- Laberinto -->
+    <div id="laberinto">
+        <div id="celdaA" class="celda"></div>
+        <div id="celdaB" class="celda"></div>
+        <div id="celdaC" class="celda"></div>
+        <div id="celdaD" class="celda trampa"></div> <!-- Trampa -->
+        <div id="celdaE" class="celda salida"></div> <!-- Salida -->
+        <div id="celdaF" class="celda"></div>
+        <div id="celdaG" class="celda"></div>
+        <div id="celdaH" class="celda"></div>
+        <div id="celdaI" class="celda jugador"></div> <!-- Jugador -->
+    </div>
+
+    <!-- Cargar el modelo de TensorFlow.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+
+    <!-- Cargar el modelo de Teachable Machine -->
+    <script src="https://teachablemachine.withgoogle.com/models/mN7DWCWjr/"></script>
+
+    <!-- Cargar Handtrack.js -->
+    <script src="https://cdn.jsdelivr.net/npm/handtrackjs/dist/handtrack.min.js"></script>
+
+    <!-- Aquí se carga tu archivo de movimiento.js -->
+    <script src="movimiento.js"></script>
+
+    <script>
+        // Inicializamos Handtrack.js
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const modelParams = {
+            flipHorizontal: true,
+            maxNumBoxes: 1,
+            iouThreshold: 0.5,
+            scoreThreshold: 0.6
+        };
+
+        let model;
+
+        // Inicializamos el modelo
+        handTrack.load(modelParams).then((loadedModel) => {
+            model = loadedModel;
+            startCamera();
+        });
+
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    video.srcObject = stream;
+                    setInterval(detectHand, 100);  // Detectar mano cada 100ms
+                });
+        }
+
+        function detectHand() {
+            model.detect(video).then(predictions => {
+                if (predictions.length > 0) {
+                    let numFingers = countFingers(predictions);
+                    movePlayer(numFingers);  // Mueve al jugador según los dedos detectados
+                }
+            });
+        }
+
+        // Función para contar los dedos levantados
+        function countFingers(predictions) {
+            let fingers = 0;
+            const keypoints = predictions[0].keypoints;
+            
+            // Detecta si el dedo está levantado por la posición de los puntos clave
+            if (keypoints[4].y < keypoints[3].y) fingers++; // Pulgar
+            if (keypoints[8].y < keypoints[7].y) fingers++; // Índice
+            if (keypoints[12].y < keypoints[11].y) fingers++; // Medio
+            if (keypoints[16].y < keypoints[15].y) fingers++; // Anular
+            if (keypoints[20].y < keypoints[19].y) fingers++; // Meñique
+            return fingers;
+        }
+
+        // Función para mover el jugador basado en el número de dedos
+        function movePlayer(fingers) {
+            switch(fingers) {
+                case 1: // Un dedo: Moverse arriba
+                    moverJugador(1);  // Llama a la función de movimiento exportada
+                    break;
+                case 2: // Dos dedos: Moverse abajo
+                    moverJugador(2);
+                    break;
+                case 3: // Tres dedos: Moverse a la izquierda
+                    moverJugador(3);
+                    break;
+                case 4: // Cuatro dedos: Moverse a la derecha
+                    moverJugador(4);
+                    break;
+                case 5: // Puño cerrado (cinco dedos): Moverse a la salida
+                    moverJugador(5);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        // Función para capturar la imagen del video con retardo de 3 segundos
+        function capturarImagenConRetardo() {
+            const videoElement = document.getElementById('webcam');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const imagenElement = document.getElementById('captura-imagen');
+
+            // Ajustar el tamaño del canvas al tamaño del video
+            canvas.width = videoElement.videoWidth;
+            canvas.height = videoElement.videoHeight;
+
+            // Establecer el retardo de 3 segundos antes de capturar la imagen
+            setTimeout(() => {
+                // Dibujar el fotograma del video en el canvas después de 3 segundos
+                ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+                // Convertir el canvas en una imagen (data URL) y mostrarla en la página
+                const imagenDataURL = canvas.toDataURL('image/png');
+                imagenElement.src = imagenDataURL;
+            }, 3000); // 3000 milisegundos = 3 segundos
+        }
+
+        // Asociar la función capturarImagenConRetardo al botón de captura
+        document.getElementById('capture-btn').addEventListener('click', capturarImagenConRetardo);
+    </script>
+</body>
+</html>
